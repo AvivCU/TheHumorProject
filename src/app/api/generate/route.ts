@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
   const geminiResponse = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
