@@ -24,12 +24,26 @@ export default async function DashboardPage() {
         Signed in as {user.email}. This page only renders for logged-in
         users -- the middleware redirects anyone else to /login.
       </p>
-      <Link
-        href="/profile"
-        className="mt-6 text-sm font-medium text-zinc-900 underline dark:text-zinc-50"
-      >
-        Edit your profile
-      </Link>
+      <div className="mt-6 flex flex-col gap-2">
+        <Link
+          href="/generate"
+          className="text-sm font-medium text-zinc-900 underline dark:text-zinc-50"
+        >
+          Generate a caption
+        </Link>
+        <Link
+          href="/feed"
+          className="text-sm font-medium text-zinc-900 underline dark:text-zinc-50"
+        >
+          Browse the feed
+        </Link>
+        <Link
+          href="/profile"
+          className="text-sm font-medium text-zinc-900 underline dark:text-zinc-50"
+        >
+          Edit your profile
+        </Link>
+      </div>
       <SignOutButton />
     </main>
   );
