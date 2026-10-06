@@ -3,37 +3,88 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 
+const MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 1200;
+const RETRY_STATUS_MESSAGES = [
+  "The model is busy -- trying again...",
+  "Still busy. Please give it one more moment...",
+];
+
+function Spinner() {
+  return (
+    <svg
+      className="h-4 w-4 animate-spin"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+      />
+    </svg>
+  );
+}
+
 export default function GenerateForm() {
   const [prompt, setPrompt] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [isLoading, setIsLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [result, setResult] = useState<{ caption: string } | null>(null);
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!prompt.trim()) return;
-
-    setStatus("loading");
-    setErrorMessage("");
-    setResult(null);
-
+  const attemptGenerate = async (
+    attempt: number,
+    currentPrompt: string
+  ): Promise<void> => {
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt: currentPrompt }),
     });
 
     const data = await response.json();
 
-    if (!response.ok) {
-      setStatus("error");
-      setErrorMessage(data.error || "Something went wrong.");
+    if (response.ok) {
+      setResult({ caption: data.generation.caption });
+      setPrompt("");
+      setIsLoading(false);
+      setStatusMessage("");
       return;
     }
 
-    setStatus("idle");
-    setResult({ caption: data.generation.caption });
-    setPrompt("");
+    if (data.retryable && attempt < MAX_ATTEMPTS) {
+      setStatusMessage(RETRY_STATUS_MESSAGES[attempt - 1] ?? "Trying again...");
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      return attemptGenerate(attempt + 1, currentPrompt);
+    }
+
+    setIsLoading(false);
+    setStatusMessage("");
+    setErrorMessage(
+      data.retryable ? "Third time lucky?" : data.error || "Something went wrong."
+    );
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!prompt.trim() || isLoading) return;
+
+    setIsLoading(true);
+    setErrorMessage("");
+    setStatusMessage("Generating...");
+    setResult(null);
+
+    await attemptGenerate(1, prompt);
   };
 
   return (
@@ -50,13 +101,14 @@ export default function GenerateForm() {
 
       <button
         type="submit"
-        disabled={status === "loading" || !prompt.trim()}
-        className="flex h-12 w-full items-center justify-center rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] disabled:opacity-50 dark:hover:bg-[#ccc]"
+        disabled={isLoading || !prompt.trim()}
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] disabled:opacity-50 dark:hover:bg-[#ccc]"
       >
-        {status === "loading" ? "Generating..." : "Generate caption"}
+        {isLoading && <Spinner />}
+        {isLoading ? statusMessage || "Generating..." : "Generate caption"}
       </button>
 
-      {status === "error" && (
+      {!isLoading && errorMessage && (
         <p className="text-sm text-red-600">{errorMessage}</p>
       )}
 

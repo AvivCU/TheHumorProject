@@ -50,9 +50,15 @@ export async function POST(request: Request) {
   );
 
   if (!geminiResponse.ok) {
-    const errorText = await geminiResponse.text();
+    const errorBody = await geminiResponse.json().catch(() => null);
+    const retryable = geminiResponse.status === 503 || geminiResponse.status === 429;
     return NextResponse.json(
-      { error: `Generation failed: ${errorText}` },
+      {
+        error:
+          errorBody?.error?.message ||
+          `Generation failed (${geminiResponse.status}).`,
+        retryable,
+      },
       { status: 502 }
     );
   }

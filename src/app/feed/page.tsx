@@ -209,6 +209,7 @@ export default async function FeedPage({
               downvotes={item.downvotes}
               initialVote={myVotes[item.id] ?? null}
               isSignedIn={Boolean(user)}
+              userId={user?.id ?? null}
             />
           </li>
         ))}
