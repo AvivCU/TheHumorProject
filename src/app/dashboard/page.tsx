@@ -44,7 +44,7 @@ export default async function DashboardPage() {
           Edit your profile
         </Link>
       </div>
-      <SignOutButton />
+      <SignOutButton className="mt-6" />
     </main>
   );
 }

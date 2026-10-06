@@ -37,7 +37,7 @@ export default async function ProfilePage() {
         initialAvatarUrl={profile?.avatar_url ?? null}
       />
 
-      <SignOutButton />
+      <SignOutButton className="mt-6" />
     </main>
   );
 }
