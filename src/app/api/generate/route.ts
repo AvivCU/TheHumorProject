@@ -100,5 +100,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ generation });
+  const MILESTONES = [1, 5, 10, 25, 50, 100];
+  const { count } = await supabase
+    .from("generations")
+    .select("id", { count: "exact", head: true })
+    .eq("creator_id", user.id);
+
+  const milestoneCount = count && MILESTONES.includes(count) ? count : null;
+
+  return NextResponse.json({ generation, milestoneCount });
 }

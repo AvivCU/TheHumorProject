@@ -41,6 +41,7 @@ export default function GenerateForm() {
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [result, setResult] = useState<{ caption: string } | null>(null);
+  const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
 
   const attemptGenerate = async (
     attempt: number,
@@ -56,6 +57,7 @@ export default function GenerateForm() {
 
     if (response.ok) {
       setResult({ caption: data.generation.caption });
+      setMilestoneCount(data.milestoneCount ?? null);
       setPrompt("");
       setIsLoading(false);
       setStatusMessage("");
@@ -83,6 +85,7 @@ export default function GenerateForm() {
     setErrorMessage("");
     setStatusMessage("Generating...");
     setResult(null);
+    setMilestoneCount(null);
 
     await attemptGenerate(1, prompt);
   };
@@ -110,6 +113,18 @@ export default function GenerateForm() {
 
       {!isLoading && errorMessage && (
         <p className="text-sm text-red-600">{errorMessage}</p>
+      )}
+
+      {milestoneCount && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <span className="animate-bounce text-2xl" aria-hidden="true">
+            🎉
+          </span>
+          <p className="font-medium">
+            Milestone! That&apos;s your {milestoneCount}
+            {milestoneCount === 1 ? "st" : "th"} caption.
+          </p>
+        </div>
       )}
 
       {result && (
