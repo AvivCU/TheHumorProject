@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { runPromptChain } from "@/lib/prompt-chain";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -28,51 +29,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const result = await runPromptChain(supabase, user.id, prompt.trim());
 
-  const geminiResponse = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: `You write short, funny one-or-two sentence captions for a college humor app. Write one witty caption about: ${prompt}. Respond with only the caption text, no quotes, no extra commentary.`,
-              },
-            ],
-          },
-        ],
-      }),
-    }
-  );
-
-  if (!geminiResponse.ok) {
-    const errorBody = await geminiResponse.json().catch(() => null);
-    const retryable = geminiResponse.status === 503 || geminiResponse.status === 429;
+  if (!result.ok) {
     return NextResponse.json(
-      {
-        error:
-          errorBody?.error?.message ||
-          `Generation failed (${geminiResponse.status}).`,
-        retryable,
-      },
+      { error: result.error, retryable: result.retryable },
       { status: 502 }
     );
   }
 
-  const geminiData = await geminiResponse.json();
-  const caption: string | undefined =
-    geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-
-  if (!caption) {
-    return NextResponse.json(
-      { error: "The model didn't return any text." },
-      { status: 502 }
-    );
-  }
+  const { caption, requestId } = result;
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -97,8 +63,25 @@ export async function POST(request: Request) {
     .single();
 
   if (insertError) {
+    await supabase
+      .from("generation_requests")
+      .update({
+        status: "failed",
+        error: insertError.message,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", requestId);
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
+
+  await supabase
+    .from("generation_requests")
+    .update({
+      status: "completed",
+      generation_id: generation.id,
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", requestId);
 
   const MILESTONES = [1, 5, 10, 25, 50, 100];
   const { count } = await supabase
