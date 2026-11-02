@@ -58,6 +58,7 @@ export async function POST(request: Request) {
       author_name: authorName,
       prompt: prompt.trim(),
       caption,
+      request_id: requestId,
     })
     .select()
     .single();
