@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runPromptChain } from "@/lib/prompt-chain";
+import { isStyle, withStyle } from "@/lib/taste";
 
+const MAX_OPTIONS = 3;
+
+// Writes up to 3 caption options for a situation in the chosen humor style.
+// Nothing is posted yet: the author picks one with /api/generate/post.
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -15,82 +20,50 @@ export async function POST(request: Request) {
     );
   }
 
-  const { prompt } = await request.json();
+  const { prompt, style, count } = await request.json();
 
   if (typeof prompt !== "string" || prompt.trim().length === 0) {
     return NextResponse.json({ error: "Prompt is required." }, { status: 400 });
   }
+  if (prompt.length > 300) {
+    return NextResponse.json(
+      { error: "Keep the situation under 300 characters." },
+      { status: 400 }
+    );
+  }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  if (!process.env.GEMINI_API_KEY) {
     return NextResponse.json(
       { error: "Server is missing GEMINI_API_KEY." },
       { status: 500 }
     );
   }
 
-  const result = await runPromptChain(supabase, user.id, prompt.trim());
+  const input = withStyle(prompt.trim(), isStyle(style) ? style : null);
+  const howMany = Math.max(1, Math.min(Number(count) || MAX_OPTIONS, MAX_OPTIONS));
 
-  if (!result.ok) {
-    return NextResponse.json(
-      { error: result.error, retryable: result.retryable },
-      { status: 502 }
-    );
+  // Each option is its own chain run (and its own logged request).
+  const results = await Promise.all(
+    Array.from({ length: howMany }, () =>
+      runPromptChain(supabase, user.id, input, { completeOnSuccess: true })
+    )
+  );
+
+  const seen = new Set<string>();
+  const options = results.flatMap((result) => {
+    if (!result.ok) return [];
+    const key = result.caption.toLowerCase();
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ requestId: result.requestId, caption: result.caption }];
+  });
+
+  if (options.length === 0) {
+    const failure = results.find((result) => !result.ok);
+    const error = failure && !failure.ok ? failure.error : "Generation failed.";
+    const retryable = results.some((result) => !result.ok && result.retryable);
+    return NextResponse.json({ error, retryable }, { status: 502 });
   }
 
-  const { caption, requestId } = result;
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("first_name, last_name")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const authorName =
-    [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
-    user.email ||
-    "Anonymous";
-
-  const { data: generation, error: insertError } = await supabase
-    .from("generations")
-    .insert({
-      creator_id: user.id,
-      author_name: authorName,
-      prompt: prompt.trim(),
-      caption,
-      request_id: requestId,
-    })
-    .select()
-    .single();
-
-  if (insertError) {
-    await supabase
-      .from("generation_requests")
-      .update({
-        status: "failed",
-        error: insertError.message,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", requestId);
-    return NextResponse.json({ error: insertError.message }, { status: 500 });
-  }
-
-  await supabase
-    .from("generation_requests")
-    .update({
-      status: "completed",
-      generation_id: generation.id,
-      completed_at: new Date().toISOString(),
-    })
-    .eq("id", requestId);
-
-  const MILESTONES = [1, 5, 10, 25, 50, 100];
-  const { count } = await supabase
-    .from("generations")
-    .select("id", { count: "exact", head: true })
-    .eq("creator_id", user.id);
-
-  const milestoneCount = count && MILESTONES.includes(count) ? count : null;
-
-  return NextResponse.json({ generation, milestoneCount });
+  return NextResponse.json({ options });
 }

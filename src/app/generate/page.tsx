@@ -20,8 +20,8 @@ export default async function GeneratePage() {
         Generate a caption
       </h1>
       <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-        Describe a situation and get a short, AI-written caption. Posted
-        generations show up in the feed for everyone to vote on.
+        Pick a style, describe a campus moment, and CUmor writes 3 captions.
+        Post your favorite and everyone can rate it.
       </p>
       <GenerateForm />
     </main>

@@ -20,7 +20,7 @@ export default function SignOutButton({
   return (
     <button
       onClick={handleSignOut}
-      className={`text-sm font-medium text-zinc-500 underline hover:text-zinc-900 dark:hover:text-zinc-50 ${className}`}
+      className={`whitespace-nowrap text-sm font-medium text-zinc-500 underline hover:text-zinc-900 dark:hover:text-zinc-50 ${className}`}
     >
       Sign out
     </button>

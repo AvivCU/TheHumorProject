@@ -9,6 +9,11 @@ export default function Home() {
       <p className="mt-3 max-w-md text-lg text-zinc-600 dark:text-zinc-400">
         AI-written captions for campus life, rated by real people.
       </p>
+      <ul className="mt-6 flex flex-col gap-1 text-sm text-zinc-500 dark:text-zinc-400">
+        <li>✍️ Pick a humor style and get 3 captions about your campus moment</li>
+        <li>😂 Swipe through captions: funny or not</li>
+        <li>✨ A For You feed that learns your sense of humor</li>
+      </ul>
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
         <Link
@@ -16,6 +21,12 @@ export default function Home() {
           className="flex h-12 items-center justify-center rounded-full bg-foreground px-6 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
         >
           View Feed
+        </Link>
+        <Link
+          href="/rate"
+          className="flex h-12 items-center justify-center rounded-full border border-zinc-300 px-6 text-zinc-900 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
+        >
+          😂 Start rating
         </Link>
         <Link
           href="/generate"
