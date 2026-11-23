@@ -32,12 +32,18 @@ export default function RateDeck({
   const startX = useRef(0);
 
   // The order is fixed when the page opens, ranked by your taste so far.
-  const [deck] = useState(() =>
-    rankForYou(
-      captions.filter((item) => item.creator_id !== userId && !initialVotes[item.id]),
+  // Other people's captions come first; your own come last so a young app
+  // still has something to rate.
+  const [deck] = useState(() => {
+    const ranked = rankForYou(
+      captions.filter((item) => !initialVotes[item.id]),
       buildTaste(captions, initialVotes)
-    )
-  );
+    );
+    return [
+      ...ranked.filter((item) => item.creator_id !== userId),
+      ...ranked.filter((item) => item.creator_id === userId),
+    ];
+  });
   const remaining = deck.filter((item) => !votes[item.id] || item.id === result?.id);
   const current = remaining[0];
   const taste = useMemo(() => buildTaste(captions, votes), [captions, votes]);
@@ -180,7 +186,9 @@ export default function RateDeck({
               </p>
             )}
           </div>
-          <p className="mt-6 text-xs text-zinc-400">by {current.author_name}</p>
+          <p className="mt-6 text-xs text-zinc-400">
+            by {current.creator_id === userId ? "you" : current.author_name}
+          </p>
 
           {result && result.id === current.id && (
             <div
