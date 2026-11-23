@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { cleanCaption } from "@/lib/prompt-chain";
 import { splitStyledPrompt } from "@/lib/taste";
+import { isOwnImageUrl } from "@/lib/caption-image";
 
 const MILESTONES = [1, 5, 10, 25, 50, 100];
 
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { requestId } = await request.json();
+  const { requestId, imageUrl } = await request.json();
   if (!Number.isInteger(requestId)) {
     return NextResponse.json({ error: "Pick a caption to post." }, { status: 400 });
   }
@@ -57,21 +58,29 @@ export async function POST(request: Request) {
     user.email ||
     "Anonymous";
 
+  const photoUrl = isOwnImageUrl(imageUrl, process.env.NEXT_PUBLIC_SUPABASE_URL!, user.id)
+    ? imageUrl
+    : null;
+
   const row = {
     creator_id: user.id,
     author_name: authorName,
-    prompt: situation,
+    // A photo-only caption has no written situation.
+    prompt: situation === "the attached photo" ? "" : situation,
     caption,
     request_id: requestId,
     style,
+    image_url: photoUrl,
   };
 
   let insert = await supabase.from("generations").insert(row).select().single();
-  // Before supabase/week11.sql is run there is no style column: post without it.
-  if (insert.error && /style/i.test(insert.error.message)) {
-    const { style: _unused, ...withoutStyle } = row;
-    void _unused;
-    insert = await supabase.from("generations").insert(withoutStyle).select().single();
+  // Before supabase/week11.sql is run the style / image_url columns don't
+  // exist: post without them rather than failing.
+  if (insert.error && /style|image_url/i.test(insert.error.message)) {
+    const { style: _style, image_url: _image, ...plain } = row;
+    void _style;
+    void _image;
+    insert = await supabase.from("generations").insert(plain).select().single();
   }
 
   if (insert.error || !insert.data) {

@@ -7,6 +7,7 @@ import type { FeedCaption } from "@/lib/captions";
 import { buildTaste, rankForYou, reasonFor } from "@/lib/taste";
 import CaptionBadges from "@/components/caption-badges";
 import HumorProfileCard from "@/components/humor-profile-card";
+import CaptionPhoto from "@/components/caption-photo";
 
 const SWIPE_THRESHOLD = 100;
 const TUNED_AFTER = 5;
@@ -173,12 +174,15 @@ export default function RateDeck({
           className="relative flex min-h-64 cursor-grab select-none flex-col justify-between rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg active:cursor-grabbing dark:border-zinc-800 dark:bg-zinc-950"
         >
           <div>
-            <p className="text-2xl font-medium leading-snug text-zinc-900 dark:text-zinc-50">
+            <CaptionPhoto url={current.image_url} tall />
+            <p className="mt-4 text-2xl font-medium leading-snug text-zinc-900 dark:text-zinc-50">
               {current.caption}
             </p>
-            <p className="mt-2 text-sm italic text-zinc-500 dark:text-zinc-400">
-              about: {current.prompt}
-            </p>
+            {current.prompt && (
+              <p className="mt-2 text-sm italic text-zinc-500 dark:text-zinc-400">
+                about: {current.prompt}
+              </p>
+            )}
             <CaptionBadges item={current} />
             {reasonFor(current, taste) && (
               <p className="mt-3 text-xs font-medium text-violet-700 dark:text-violet-300">

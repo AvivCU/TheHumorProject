@@ -53,6 +53,9 @@ export type RunOptions = {
   image?: ChainImage | null;
   imageUrl?: string | null;
   source?: "app" | "tool";
+  // Show the image to every step, even steps not marked include_image.
+  // CUmor uses this for uploaded photos so the AI always sees the picture.
+  imageOnEveryStep?: boolean;
   // Mark the request completed as soon as the chain succeeds. CUmor
   // leaves this off and completes it after saving the caption.
   completeOnSuccess?: boolean;
@@ -280,7 +283,7 @@ export async function runPromptChain(
       model.model_identifier,
       model.temperature,
       prompt,
-      step.include_image ? image : null
+      step.include_image || options.imageOnEveryStep ? image : null
     );
     const latencyMs = Date.now() - startedAt;
 
@@ -289,7 +292,10 @@ export async function runPromptChain(
       step_id: step.id,
       llm_model_id: model.id,
       step_order: step.step_order,
-      input_text: step.include_image && image ? `[image attached]\n${prompt}` : prompt,
+      input_text:
+        (step.include_image || options.imageOnEveryStep) && image
+          ? `[image attached]\n${prompt}`
+          : prompt,
       output_text: result.text ?? result.error,
       http_status: result.status,
       latency_ms: latencyMs,

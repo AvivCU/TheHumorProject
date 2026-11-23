@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runPromptChain } from "@/lib/prompt-chain";
 import { isStyle, withStyle } from "@/lib/taste";
+import { MAX_BASE64_LENGTH, isImageType, type AttachedImage } from "@/lib/caption-image";
 
 const MAX_OPTIONS = 3;
 
@@ -20,12 +21,34 @@ export async function POST(request: Request) {
     );
   }
 
-  const { prompt, style, count } = await request.json();
+  const { prompt, style, count, image } = await request.json();
 
-  if (typeof prompt !== "string" || prompt.trim().length === 0) {
-    return NextResponse.json({ error: "Prompt is required." }, { status: 400 });
+  // A photo can stand in for the written situation.
+  let photo: AttachedImage | null = null;
+  if (image) {
+    if (
+      !isImageType(image.mimeType) ||
+      typeof image.base64 !== "string" ||
+      image.base64.length === 0 ||
+      image.base64.length > MAX_BASE64_LENGTH ||
+      !/^[A-Za-z0-9+/=]+$/.test(image.base64)
+    ) {
+      return NextResponse.json(
+        { error: "That photo can't be used. Try a smaller JPG, PNG or WebP." },
+        { status: 400 }
+      );
+    }
+    photo = { mimeType: image.mimeType, base64: image.base64 };
   }
-  if (prompt.length > 300) {
+
+  const situation = typeof prompt === "string" ? prompt.trim() : "";
+  if (!situation && !photo) {
+    return NextResponse.json(
+      { error: "Describe the situation or add a photo." },
+      { status: 400 }
+    );
+  }
+  if (situation.length > 300) {
     return NextResponse.json(
       { error: "Keep the situation under 300 characters." },
       { status: 400 }
@@ -39,13 +62,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const input = withStyle(prompt.trim(), isStyle(style) ? style : null);
+  const input = withStyle(
+    situation || "the attached photo",
+    isStyle(style) ? style : null
+  );
   const howMany = Math.max(1, Math.min(Number(count) || MAX_OPTIONS, MAX_OPTIONS));
 
   // Each option is its own chain run (and its own logged request).
   const results = await Promise.all(
     Array.from({ length: howMany }, () =>
-      runPromptChain(supabase, user.id, input, { completeOnSuccess: true })
+      runPromptChain(supabase, user.id, input, {
+        completeOnSuccess: true,
+        image: photo,
+        imageOnEveryStep: !!photo,
+      })
     )
   );
 

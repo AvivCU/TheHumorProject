@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { STYLES, STYLE_KEYS, type StyleKey } from "@/lib/taste";
+import { IMAGE_BUCKET } from "@/lib/caption-image";
+import { resizeImage, type ResizedImage } from "@/lib/resize-image";
+import { createClient } from "@/lib/supabase/client";
 
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 1200;
@@ -48,14 +51,46 @@ export default function GenerateForm() {
   const [options, setOptions] = useState<Option[]>([]);
   const [picked, setPicked] = useState<number | null>(null);
   const [isPosting, setIsPosting] = useState(false);
-  const [posted, setPosted] = useState<{ id: number; caption: string } | null>(null);
+  const [posted, setPosted] = useState<{
+    id: number;
+    caption: string;
+    imageUrl: string | null;
+  } | null>(null);
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
+  const [photo, setPhoto] = useState<ResizedImage | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const choosePhoto = async (file: File | undefined) => {
+    if (!file) return;
+    setErrorMessage("");
+    try {
+      if (photo) URL.revokeObjectURL(photo.previewUrl);
+      setPhoto(await resizeImage(file));
+      setOptions([]);
+      setPicked(null);
+    } catch {
+      setErrorMessage("That photo couldn't be read. Try a JPG, PNG or WebP.");
+    }
+  };
+
+  const removePhoto = () => {
+    if (photo) URL.revokeObjectURL(photo.previewUrl);
+    setPhoto(null);
+    setOptions([]);
+    setPicked(null);
+    if (fileInput.current) fileInput.current.value = "";
+  };
 
   const attemptGenerate = async (attempt: number, currentPrompt: string): Promise<void> => {
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: currentPrompt, style, count: 3 }),
+      body: JSON.stringify({
+        prompt: currentPrompt,
+        style,
+        count: 3,
+        image: photo ? { mimeType: "image/jpeg", base64: photo.base64 } : null,
+      }),
     });
     const data = await response.json();
 
@@ -79,7 +114,7 @@ export default function GenerateForm() {
   };
 
   const generate = async () => {
-    if (!prompt.trim() || isLoading) return;
+    if ((!prompt.trim() && !photo) || isLoading) return;
     setIsLoading(true);
     setErrorMessage("");
     setStatusMessage("Writing 3 options...");
@@ -99,10 +134,33 @@ export default function GenerateForm() {
     if (picked === null || isPosting) return;
     setIsPosting(true);
     setErrorMessage("");
+
+    // Upload the photo to the user's own folder first; the server checks
+    // the address before saving it with the caption.
+    let imageUrl: string | null = null;
+    if (photo) {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const path = `${user.id}/${crypto.randomUUID()}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from(IMAGE_BUCKET)
+          .upload(path, photo.blob, { contentType: "image/jpeg" });
+        if (uploadError) {
+          setIsPosting(false);
+          setErrorMessage(`The photo didn't upload: ${uploadError.message}`);
+          return;
+        }
+        imageUrl = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path).data.publicUrl;
+      }
+    }
+
     const response = await fetch("/api/generate/post", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ requestId: picked }),
+      body: JSON.stringify({ requestId: picked, imageUrl }),
     });
     const data = await response.json();
     setIsPosting(false);
@@ -110,10 +168,15 @@ export default function GenerateForm() {
       setErrorMessage(data.error || "Could not post the caption.");
       return;
     }
-    setPosted({ id: data.generation.id, caption: data.generation.caption });
+    setPosted({
+      id: data.generation.id,
+      caption: data.generation.caption,
+      imageUrl: data.generation.image_url ?? null,
+    });
     setMilestoneCount(data.milestoneCount ?? null);
     setOptions([]);
     setPrompt("");
+    removePhoto();
   };
 
   return (
@@ -142,8 +205,51 @@ export default function GenerateForm() {
         </fieldset>
 
         <div className="flex flex-col gap-2">
+          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+            2. Add a photo <span className="font-normal text-zinc-500">(optional)</span>
+          </p>
+          <input
+            ref={fileInput}
+            id="photo"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            onChange={(event) => void choosePhoto(event.target.files?.[0])}
+          />
+          {photo ? (
+            <div className="flex items-start gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={photo.previewUrl}
+                alt="Your photo"
+                className="h-28 w-28 rounded-lg object-cover"
+              />
+              <div className="flex flex-col items-start gap-2 text-sm">
+                <p className="text-zinc-600 dark:text-zinc-400">
+                  The AI will look at this photo and write captions about it.
+                </p>
+                <button
+                  type="button"
+                  onClick={removePhoto}
+                  className="rounded-full border border-zinc-300 px-3 py-1 text-xs dark:border-zinc-700"
+                >
+                  Remove photo
+                </button>
+              </div>
+            </div>
+          ) : (
+            <label
+              htmlFor="photo"
+              className="flex h-24 cursor-pointer items-center justify-center rounded-lg border border-dashed border-zinc-300 text-sm text-zinc-500 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            >
+              📷 Choose a photo
+            </label>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2">
           <label htmlFor="situation" className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-            2. What&apos;s the situation?
+            3. {photo ? "Anything to add?" : "What's the situation?"}
           </label>
           <div className="flex flex-wrap gap-2" aria-label="Ideas">
             {IDEAS.map((idea) => (
@@ -169,7 +275,7 @@ export default function GenerateForm() {
 
         <button
           type="submit"
-          disabled={isLoading || !prompt.trim()}
+          disabled={isLoading || (!prompt.trim() && !photo)}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] disabled:opacity-50 dark:hover:bg-[#ccc]"
         >
           {isLoading && <Spinner />}
@@ -182,7 +288,7 @@ export default function GenerateForm() {
       {options.length > 0 && (
         <section aria-labelledby="options-heading" className="flex flex-col gap-3">
           <h2 id="options-heading" className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-            3. Pick your favorite
+            4. Pick your favorite
           </h2>
           <div role="radiogroup" className="flex flex-col gap-2">
             {options.map((option, index) => (
@@ -253,6 +359,14 @@ export default function GenerateForm() {
 
       {posted && (
         <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+          {posted.imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={posted.imageUrl}
+              alt=""
+              className="mb-3 max-h-56 w-full rounded-lg object-cover"
+            />
+          )}
           <p className="font-medium">Posted to the feed:</p>
           <p className="mt-1">&ldquo;{posted.caption}&rdquo;</p>
           <p className="mt-3 flex flex-wrap gap-4">

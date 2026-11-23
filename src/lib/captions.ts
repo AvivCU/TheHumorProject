@@ -4,10 +4,11 @@ import type { Caption } from "@/lib/taste";
 export type FeedCaption = Caption & {
   creator_id: string;
   author_name: string;
+  image_url: string | null;
 };
 
 // Every caption plus the signed-in user's votes. `select("*")` keeps this
-// working before supabase/week11.sql adds the style column.
+// working before supabase/week11.sql adds the style and image_url columns.
 export async function loadCaptions(
   supabase: SupabaseClient,
   userId: string | null
@@ -30,6 +31,7 @@ export async function loadCaptions(
     prompt: String(row.prompt ?? ""),
     caption: String(row.caption ?? ""),
     style: typeof row.style === "string" ? row.style : null,
+    image_url: typeof row.image_url === "string" ? row.image_url : null,
     upvotes: Number(row.upvotes ?? 0),
     downvotes: Number(row.downvotes ?? 0),
     created_at: String(row.created_at ?? new Date().toISOString()),

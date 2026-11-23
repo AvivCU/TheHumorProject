@@ -15,6 +15,7 @@ import {
 } from "@/lib/taste";
 import CaptionBadges from "@/components/caption-badges";
 import ShareButton from "@/components/share-button";
+import CaptionPhoto from "@/components/caption-photo";
 import VoteButtons from "./vote-buttons";
 
 export const dynamic = "force-dynamic";
@@ -297,8 +298,11 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                   {reason}
                 </p>
               )}
-              <p className="mt-2 text-lg text-zinc-900 dark:text-zinc-50">{item.caption}</p>
-              <p className="mt-1 text-xs italic text-zinc-400">about: {item.prompt}</p>
+              <CaptionPhoto url={item.image_url} />
+              <p className="mt-3 text-lg text-zinc-900 dark:text-zinc-50">{item.caption}</p>
+              {item.prompt && (
+                <p className="mt-1 text-xs italic text-zinc-400">about: {item.prompt}</p>
+              )}
               <CaptionBadges item={item} />
 
               <div className="flex flex-wrap items-center gap-3">
